@@ -6,8 +6,6 @@ This repository provides an R tutorial for querying and processing NASA's Black 
 
 Black Marble data represents the Earth's surface and atmosphere visible light emissions at night, captured by the Visible Infrared Imaging Radiometer Suite (VIIRS) Day/Night Band (DNB). This data is valuable for applications in urbanization studies, disaster response, and socioeconomic research.
 
-For a detailed background and step-by-step explanation, please refer to the full tutorial on [Downloading and Processing Black Marble Nighttime Light Data in R](https://yohaniddawela.substack.com/p/tutorial-downloading-and-processing).
-
 ## Prerequisites
 
 ### R and RStudio
