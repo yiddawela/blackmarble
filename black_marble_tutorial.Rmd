@@ -1,0 +1,97 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+For background information on this, please read the full tutorial here: https://yohaniddawela.substack.com/p/tutorial-downloading-and-processing
+
+```{r}
+# Clearing the workspace
+rm(list = ls())
+
+# Loading required libraries
+library(sf)
+library(terra)
+library(tmap)
+library(blackmarbler)
+library(raster)
+library(exactextractr)
+library(lubridate)
+library(geodata)
+library(tidyverse)
+
+bearer = "PASTE_YOUR_BEARER_HERE"
+
+```
+
+Import region of interest (in this case Sydney), using the geodata package
+
+```{r}
+# Obtaining region of interest (ROI) as a simple feature (sf) object
+# for Australia at the second administrative level
+shapefile = gadm(country = "AUS", level=2, path = tempdir()) |> 
+  st_as_sf() |>
+  filter(GID_2 == "AUS.5.122_1")
+
+```
+
+
+Import black marble data
+
+For documentation on monthly data, see Table 9 on page 18 of the following document: https://viirsland.gsfc.nasa.gov/PDF/BlackMarbleUserGuide_v1.2_20210421.pdf
+
+```{r}
+# Downloading Black Marble data for the ROI over a specified date range
+black_marble_data = bm_raster(roi_sf = shapefile, # this specifies the region of interest
+                               product_id = "VNP46A3", # this specifies the monthly luminosity data
+                               date = seq.Date(from = ymd("2014-01-01"), to = ymd("2022-12-01"), by = "month"), # this specifies the date range
+                               bearer = bearer, # this is the API bearer for NASA LAADS DAAC from Step 3
+                               variable = c("AllAngle_Composite_Snow_Free"), # this selects the layer we're interested in i.e. satellite angle and snow-free observations
+                               quality_flag_rm = c(255, 2)) # this drops bad quality observations and coverts them to NA values)
+
+
+# Storing the layer names from the original raster stack
+original_layer_names = names(black_marble_data)
+
+# Imputing missing values in the raster data
+imputed_data = approxNA(black_marble_data, method="linear", rule=2, f=0) #addressing the NA values by linear interpolation
+
+# Reassigning the original layer names to the new raster stack
+names(imputed_data) = original_layer_names
+
+# Transforming the ROI to match the CRS of the raster data
+transformed_shapefile = st_transform(shapefile, crs(imputed_data))
+
+# Initializing an empty dataframe to store results
+results = data.frame(GID_2 = character(), Luminosity = numeric(), Date = character())
+
+# Extracting and summarizing data for each raster layer
+for (i in 1:nlayers(imputed_data)) {
+  layer_values = exact_extract(imputed_data[[i]], transformed_shapefile, 'sum')
+  layer_results = data.frame(GID_2 = transformed_shapefile$GID_2, 
+                              Luminosity = layer_values, 
+                              Date = rep(names(imputed_data)[i], length(layer_values)))
+  results = rbind(results, layer_results)
+}
+
+# Formatting the Date column
+results$Date = as.Date(paste0(substr(results$Date, 2, 5), "-", substr(results$Date, 7, 8), "-01"))
+
+```
+
+
+Make graphs using ggplot2
+
+```{r}
+# Creating a line graph with shaded areas for summer and winter
+ggplot(results, aes(x = Date, y = (Luminosity), group = GID_2, color = GID_2)) +
+  geom_line() +
+  labs(title = "Monthly Luminosity for Sydney", 
+       subtitle = "Data from NASA Black Marble", 
+       x = "Month", 
+       y = "Luminosity",
+       caption = "x.com/yohaniddawela") +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  theme_minimal()
+
+```
